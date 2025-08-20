@@ -211,7 +211,7 @@ class App extends React.Component {
     const textAreaValue = placeholderText[this.state.drawGraph ? 1 : 0];
 
     return (
-      <div class="global-div">
+      <div className="global-div">
         <div className="multi-button">
           <button onClick={this.toDrawButton.bind(this)}>
             {"Drawing a " + (this.state.drawGraph ? "graph" : "trie")}
@@ -228,9 +228,14 @@ class App extends React.Component {
           <button onClick={this.dragAll.bind(this)}>
             {"drag " + (this.state.drag ? "all" : "a single node")}
           </button>
+
+          {/* New Center Button */}
+          <button onClick={() => this.canvasRef?.resetView()}>
+            Center
+          </button>
         </div>
 
-        <div class="image-wrapper">
+        <div className="image-wrapper">
           <textarea
             type="text"
             className="input"
@@ -238,6 +243,7 @@ class App extends React.Component {
             placeholder={textAreaValue} />
 
           <Canvas
+            ref={(ref) => { this.canvasRef = ref; }}
             nodes={this.state.nodes}
             edges={Array.from(this.state.edges)}
             directed={this.state.directed}

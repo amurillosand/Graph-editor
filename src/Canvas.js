@@ -10,12 +10,25 @@ class Canvas extends React.Component {
   constructor(props) {
     super(props);
 
+    const defaultCamera = {
+      viewX: -500,
+      viewY: -500,
+      viewW: 2000,
+      viewH: 2000,
+    };
+
+    this.defaultCamera = defaultCamera;
+
     this.state = {
       nodesInfo: [],
       printableNodes: [],
       deltaX: 0,
       deltaY: 0,
       movedNodeId: null,
+
+      ...defaultCamera,
+      isPanning: false,
+      lastMouse: null,
     };
   }
 
@@ -31,7 +44,6 @@ class Canvas extends React.Component {
           node.y = y;
         }
       }
-
       return node;
     });
 
@@ -47,9 +59,7 @@ class Canvas extends React.Component {
     let component = null;
     if (this.state.movedNodeId !== null && this.props.drag) {
       if (this.state.deltaX !== prevState.deltaX || this.state.deltaY !== prevState.deltaY) {
-        console.log("El nodo", this.state.movedNodeId, "se está moviendo")
         component = getComponentFrom(this.state.movedNodeId, this.state.nodesInfo, this.props.edges);
-        console.log(component)
       }
     }
 
@@ -61,16 +71,14 @@ class Canvas extends React.Component {
         });
 
         if (prevNode !== undefined) {
-          // just update the color
           prevNode.color = info.color;
           prevNode.label = info.label;
           nodesInfo.push(prevNode);
         } else {
-          // create a completely new node
           nodesInfo.push({
             id: curNode,
-            x: getRandom(25, 800),
-            y: getRandom(25, 600),
+            x: getRandom(-500, 500),
+            y: getRandom(-500, 500),
             color: info.color,
             label: info.label,
           });
@@ -83,7 +91,6 @@ class Canvas extends React.Component {
             node.x = node.x + this.state.deltaX;
             node.y = node.y + this.state.deltaY;
           }
-
           return node;
         })
       }
@@ -114,6 +121,69 @@ class Canvas extends React.Component {
     }
   }
 
+  // ===== Camera controls =====
+
+  startPan = (e) => {
+    if (e.target.tagName === "svg") {
+      this.setState({ isPanning: true, lastMouse: { x: e.clientX, y: e.clientY } });
+    }
+  }
+
+  doPan = (e) => {
+    if (!this.state.isPanning) return;
+
+    const dx = e.clientX - this.state.lastMouse.x;
+    const dy = e.clientY - this.state.lastMouse.y;
+
+    this.setState((prev) => ({
+      viewX: prev.viewX - dx,
+      viewY: prev.viewY - dy,
+      lastMouse: { x: e.clientX, y: e.clientY }
+    }));
+  }
+
+  endPan = () => {
+    this.setState({ isPanning: false });
+  }
+
+  handleWheel = (e) => {
+    e.preventDefault();
+
+    const zoomFactor = 1.1;
+    const { viewX, viewY, viewW, viewH } = this.state;
+
+    let newW = e.deltaY < 0 ? viewW / zoomFactor : viewW * zoomFactor;
+    let newH = e.deltaY < 0 ? viewH / zoomFactor : viewH * zoomFactor;
+
+    this.setState({
+      viewX: viewX + (viewW - newW) / 2,
+      viewY: viewY + (viewH - newH) / 2,
+      viewW: newW,
+      viewH: newH,
+    });
+  }
+
+  // ===== Reset / Center view =====
+  resetView = () => {
+    if (this.state.nodesInfo.length === 0) {
+      this.setState({ ...this.defaultCamera });
+      return;
+    }
+
+    const minX = Math.min(...this.state.nodesInfo.map(n => n.x));
+    const maxX = Math.max(...this.state.nodesInfo.map(n => n.x));
+    const minY = Math.min(...this.state.nodesInfo.map(n => n.y));
+    const maxY = Math.max(...this.state.nodesInfo.map(n => n.y));
+
+    const padding = 100;
+    const viewW = (maxX - minX) + padding;
+    const viewH = (maxY - minY) + padding;
+    const viewX = minX - padding / 2;
+    const viewY = minY - padding / 2;
+
+    this.setState({ viewX, viewY, viewW, viewH });
+  }
+
   render() {
     let lastKey = new Map();
     let previousKey = "";
@@ -123,10 +193,7 @@ class Canvas extends React.Component {
       if (from > to) {
         [from, to] = [to, from]
       }
-
-      return JSON.stringify({
-        from, to
-      });
+      return JSON.stringify({ from, to });
     }
 
     function leftSide(pointA, pointB) {
@@ -136,9 +203,30 @@ class Canvas extends React.Component {
       return pointA.x < pointB.x;
     }
 
+    const printableNodes = this.state.nodesInfo.map((node) => (
+      <Node
+        key={node.id}
+        id={node.id}
+        x={node.x}
+        y={node.y}
+        color={node.color}
+        label={node.label}
+        updatePosition={this.updatePosition}
+      />
+    ));
+
     return (
-      <div className="scrollable-image">
-        <svg className="image">
+      <div
+        className="scrollable-image"
+        onMouseDown={this.startPan}
+        onMouseMove={this.doPan}
+        onMouseUp={this.endPan}
+        onWheel={this.handleWheel}
+      >
+        <svg
+          className="image"
+          viewBox={`${this.state.viewX} ${this.state.viewY} ${this.state.viewW} ${this.state.viewH}`}
+        >
           {
             this.props.edges.sort((a, b) => {
               return getKey(a[0].from, a[0].to) < getKey(b[0].from, b[0].to) ? -1 : +1;
@@ -171,7 +259,6 @@ class Canvas extends React.Component {
 
               if (edge[0].from > edge[0].to) {
                 rank *= -1;
-
                 if (from !== undefined && to !== undefined && !leftSide(to, from)) {
                   rank *= -1;
                 }
@@ -190,8 +277,6 @@ class Canvas extends React.Component {
                 delta: -40 * rank,
               })
             }).map((edge, key) => {
-              // console.log(edge);
-
               if (edge.from === edge.to) {
                 return (
                   <Loop
@@ -217,8 +302,7 @@ class Canvas extends React.Component {
               }
             })
           }
-
-          {this.state.printableNodes}
+          {printableNodes}
         </svg>
       </div>
     );
