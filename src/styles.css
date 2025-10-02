@@ -1,6 +1,7 @@
 body {
   background-color: #f6f6fc;
   margin: 0;
+  overflow: hidden;
 }
 
 .App {
@@ -8,7 +9,9 @@ body {
 }
 
 .global-div {
-  height: 100vh;
+  height: calc(100vh - 32px);
+  padding: 16px;
+  box-sizing: border-box;
 }
 
 .image {
